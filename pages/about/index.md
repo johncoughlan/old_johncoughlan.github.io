@@ -35,7 +35,7 @@ john
 ----- 
 
 
-<img src="Me Mandi's Wedding cropped.jpg" height="300">
+<img src="../Me Mandi's Wedding cropped.jpg" height="300">
 
 
 Full disclosure: There's some serious sampling error associated with this picture. I only dress like this a few days out of any given year, usually when 
