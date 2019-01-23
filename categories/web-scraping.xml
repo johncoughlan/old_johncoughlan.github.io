@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<?xml-stylesheet type="text/xsl" href="../assets/xml/rss.xsl" media="all"?><rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>Another Data Blog (Posts about web scraping)</title><link>https://johncoughlan.github.io/</link><description></description><atom:link href="https://johncoughlan.github.io/categories/web-scraping.xml" rel="self" type="application/rss+xml"></atom:link><language>en</language><copyright>Contents © 2019 &lt;a href="mailto:john.a.coughlan@gmail.com"&gt;John Coughlan&lt;/a&gt; </copyright><lastBuildDate>Tue, 22 Jan 2019 22:29:37 GMT</lastBuildDate><generator>Nikola (getnikola.com)</generator><docs>http://blogs.law.harvard.edu/tech/rss</docs><item><title>Scraping S&amp;P 500 Components from Wikipedia</title><link>https://johncoughlan.github.io/posts/Scraping-SP500-companies-wikipedia/</link><dc:creator>John Coughlan</dc:creator><description>&lt;div class="cell border-box-sizing text_cell rendered"&gt;
+&lt;div class="prompt input_prompt"&gt;
+&lt;/div&gt;
+&lt;div class="inner_cell"&gt;
+&lt;div class="text_cell_render border-box-sizing rendered_html"&gt;
+&lt;h3 id="Scraping-S&amp;amp;P-500-Components-from-Wikipedia"&gt;Scraping S&amp;amp;P 500 Components from Wikipedia&lt;a class="anchor-link" href="https://johncoughlan.github.io/posts/Scraping-SP500-companies-wikipedia/#Scraping-S&amp;amp;P-500-Components-from-Wikipedia"&gt;¶&lt;/a&gt;&lt;/h3&gt;&lt;h4 id="What-we're-going-to-do:"&gt;What we're going to do:&lt;a class="anchor-link" href="https://johncoughlan.github.io/posts/Scraping-SP500-companies-wikipedia/#What-we're-going-to-do:"&gt;¶&lt;/a&gt;&lt;/h4&gt;&lt;ol&gt;
+&lt;li&gt;Scrape wikipedia for lists of: &lt;ul&gt;
+&lt;li&gt;Current companies in the S&amp;amp;P 500 &lt;/li&gt;
+&lt;li&gt;Historical changes to the S&amp;amp;P 500 &lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;Write a function to generate the list of companies in the index as of a given date &lt;p&gt;&lt;a href="https://johncoughlan.github.io/posts/Scraping-SP500-companies-wikipedia/"&gt;Read more…&lt;/a&gt; (6 min remaining to read)&lt;/p&gt;&lt;/li&gt;&lt;/ol&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;</description><category>python</category><category>stock market data</category><category>web scraping</category><guid>https://johncoughlan.github.io/posts/Scraping-SP500-companies-wikipedia/</guid><pubDate>Fri, 18 Jan 2019 19:52:05 GMT</pubDate></item></channel></rss>
