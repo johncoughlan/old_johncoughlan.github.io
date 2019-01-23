@@ -1,0 +1,4 @@
+Sitemap: https://johncoughlan.github.io/sitemapindex.xml
+
+User-Agent: *
+Host: johncoughlan.github.io

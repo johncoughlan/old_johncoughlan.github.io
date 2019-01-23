@@ -1,0 +1,420 @@
+
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h2 id="Scraping-S&amp;P-500-Components-from-Wikipedia">Scraping S&amp;P 500 Components from Wikipedia<a class="anchor-link" href="#Scraping-S&amp;P-500-Components-from-Wikipedia">&#182;</a></h2><h3 id="What-we're-going-to-do:">What we're going to do:<a class="anchor-link" href="#What-we're-going-to-do:">&#182;</a></h3><ol>
+<li>Scrape wikipedia for lists of: <ul>
+<li>Current companies in the S&amp;P 500 </li>
+<li>Historical changes to the S&amp;P 500 </li>
+</ul>
+</li>
+<li>Write a function to generate the list of companies in the index as of a given date <!-- TEASER_END --> </li>
+</ol>
+<h3 id="Background">Background<a class="anchor-link" href="#Background">&#182;</a></h3><p>Getting the current list of companies in the S&amp;P 500 is pretty easy so we're gonna tackle that first. Reconstructing the index historically isn't so easy. Since the index is regularly rebalanced, we need a list of all the companies added and removed from the index and the date the change occurred.</p>
+<p>Wikipedia is nice enough to make this data available and <a href="https://en.wikipedia.org/wiki/List_of_S%26P_500_companies">here's the web page</a> if you want to see what it looks like. As we'll see shortly, the format of the table of company changes is a little tricky and requires some coding gymnastics to get it into a useable format for analysis. Let's get to it.</p>
+<p><strong>Attribution:</strong> Two of the big problems I ran into (multiple tables on a page and table data elements that span multiple rows) were solved by a fellow named Andy Roche and he was nice enough to share his approach and code in a blog post. <a href="https://roche.io/2016/05/scrape-wikipedia-with-python">Here's his post</a> so be sure to check that out for a more thorough approach to wikipedia tables.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Preliminaries">Preliminaries<a class="anchor-link" href="#Preliminaries">&#182;</a></h3><p>First up, import libraries, get the site HTML with <code>request.get()</code>, then extract the tables from the BeautifulSoup ResultSet object for further cleaning.</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[1]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="kn">import</span> <span class="nn">requests</span>
+<span class="kn">from</span> <span class="nn">bs4</span> <span class="k">import</span> <span class="n">BeautifulSoup</span>
+<span class="kn">import</span> <span class="nn">datetime</span> 
+<span class="kn">import</span> <span class="nn">re</span> 
+
+<span class="c1"># wikipedia page with our target tables and the initial web request </span>
+<span class="n">WIKI_URL</span> <span class="o">=</span> <span class="s2">&quot;https://en.wikipedia.org/wiki/List_of_S%26P_500_companies&quot;</span>
+<span class="n">req</span> <span class="o">=</span> <span class="n">requests</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">WIKI_URL</span><span class="p">)</span>
+<span class="n">req</span><span class="o">.</span><span class="n">raise_for_status</span><span class="p">()</span>
+<span class="n">data_retrieval_date</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">today</span><span class="p">()</span> 
+
+<span class="c1"># here we search for all the tables on the web page and get them into a </span>
+<span class="c1"># beautiful soup result set  </span>
+<span class="n">soup</span> <span class="o">=</span> <span class="n">BeautifulSoup</span><span class="p">(</span><span class="n">req</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="s1">&#39;lxml&#39;</span><span class="p">)</span>
+<span class="n">table_classes</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;class&quot;</span><span class="p">:</span> <span class="p">[</span><span class="s2">&quot;sortable&quot;</span><span class="p">,</span> <span class="s2">&quot;plainrowheaders&quot;</span><span class="p">]}</span>
+<span class="n">wikitables</span> <span class="o">=</span> <span class="n">soup</span><span class="o">.</span><span class="n">findAll</span><span class="p">(</span><span class="s2">&quot;table&quot;</span><span class="p">,</span> <span class="n">table_classes</span><span class="p">)</span>
+<span class="nb">type</span><span class="p">(</span><span class="n">wikitables</span><span class="p">)</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[1]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>bs4.element.ResultSet</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Parsing-the-table-of-current-companies">Parsing the table of current companies<a class="anchor-link" href="#Parsing-the-table-of-current-companies">&#182;</a></h3><p>We're interested in the first two tables on the page web page. The first table is a pretty clean HTML table that lists all the companies currently in the S&amp;P 500. We're going to traverse the table, clean thing up a bit, then store the results in a list for use later. Note the regular expression toward the end of the code block to strip out the wikipedia footnotes contained in brackets ([]).</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[2]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">rows</span> <span class="o">=</span> <span class="n">wikitables</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s2">&quot;tr&quot;</span><span class="p">)</span>
+
+<span class="c1">#parse data from table by extracting each table row (&quot;tr&quot; tags) </span>
+<span class="n">current_companies_list</span> <span class="o">=</span> <span class="p">[]</span>   
+<span class="k">for</span> <span class="n">tr</span> <span class="ow">in</span> <span class="n">rows</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">rows</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span> 
+        <span class="n">row_cells</span> <span class="o">=</span> <span class="p">[</span><span class="n">th</span><span class="o">.</span><span class="n">getText</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">th</span> <span class="ow">in</span> <span class="n">tr</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span> 
+                        <span class="k">if</span> <span class="n">th</span><span class="o">.</span><span class="n">getText</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">]</span>  
+    <span class="k">else</span><span class="p">:</span> 
+        <span class="n">row_cells</span> <span class="o">=</span> <span class="p">(([</span><span class="n">tr</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">getText</span><span class="p">()]</span> <span class="k">if</span> <span class="n">tr</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="p">[])</span> 
+                        <span class="o">+</span> <span class="p">[</span><span class="n">td</span><span class="o">.</span><span class="n">getText</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">tr</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;td&#39;</span><span class="p">)])</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">row_cells</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span> 
+        <span class="c1"># strip out brackets from reference links </span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">element</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">row_cells</span><span class="p">):</span> 
+            <span class="k">if</span> <span class="n">element</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;[&#39;</span><span class="p">)</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span> 
+                <span class="n">row_cells</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s2">&quot;[\[].*?[\]]&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">element</span><span class="p">)</span>
+        <span class="n">current_companies_list</span> <span class="o">+=</span> <span class="p">[</span><span class="n">row_cells</span><span class="p">]</span>
+        
+<span class="n">current_companies_list</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[2]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>[[&#39;Symbol&#39;,
+  &#39;Security&#39;,
+  &#39;SEC filings&#39;,
+  &#39;GICS Sector&#39;,
+  &#39;GICS Sub Industry&#39;,
+  &#39;Headquarters Location&#39;,
+  &#39;Date first added&#39;,
+  &#39;CIK&#39;,
+  &#39;Founded&#39;],
+ [&#39;MMM&#39;,
+  &#39;3M Company&#39;,
+  &#39;reports&#39;,
+  &#39;Industrials&#39;,
+  &#39;Industrial Conglomerates&#39;,
+  &#39;St. Paul, Minnesota&#39;,
+  &#39;&#39;,
+  &#39;0000066740&#39;,
+  &#39;1902&#39;]]</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><strong>Progress!</strong> Now we have a clean list of lists where the first element is a list of headers and each element after it relates to a single company. We're mostly interested in the ticker symbol for each company but it doesn't hurt to keep the additional reference info for now. Not too shabby!</p>
+<h3 id="Next-comes-the-hard-part:-parsing-the-table-of-changes">Next comes the hard part: parsing the table of changes<a class="anchor-link" href="#Next-comes-the-hard-part:-parsing-the-table-of-changes">&#182;</a></h3><p>Parsing data from the table of index component changes is a little more difficult. Some cells are blank, and some of the date values span multiple rows when more than one company change occurred on the same date. In order to get the data into a better format for analysis, here's what we need to do:</p>
+<ul>
+<li>The first column is the date a change occurred so we'll write a helper function to check if it's a date<ul>
+<li>If we find a date, we'll hold it in a temporary variable and repeat it for each row it spans in the original HTML table  </li>
+</ul>
+</li>
+<li>Next we'll clean the data so we wind up with one list element per change, accounting for the dates that span multiple rows (repeating the date when necessary) </li>
+<li>We also need to explicitly keep blank cells in the added/removed columns to correctly handle the times when companies are added and none are removed or vice versa</li>
+<li>Each list element will be in the following format:<ul>
+<li>[Date, Added (ticker and company name), Removed (ticker and company name), Reason]</li>
+</ul>
+</li>
+</ul>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[3]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1">#get table of changes into bs4 result set </span>
+<span class="n">row_chgs</span> <span class="o">=</span> <span class="n">wikitables</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s2">&quot;tr&quot;</span><span class="p">)</span>
+
+<span class="c1">#function to check if first element is a date </span>
+<span class="k">def</span> <span class="nf">date_check</span><span class="p">(</span><span class="n">date_text</span><span class="p">):</span> 
+    <span class="k">try</span><span class="p">:</span> 
+        <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">date_text</span><span class="p">,</span> <span class="s1">&#39;%B </span><span class="si">%d</span><span class="s1">, %Y&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="kc">True</span> 
+    <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span> 
+        <span class="k">return</span> <span class="kc">False</span> 
+
+<span class="c1"># parse data as is</span>
+<span class="n">company_changes_list</span><span class="p">,</span> <span class="n">date_holder</span><span class="p">,</span> <span class="n">reason_holder</span> <span class="o">=</span> <span class="p">[],</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span>
+<span class="k">for</span> <span class="n">tr</span> <span class="ow">in</span> <span class="n">row_chgs</span><span class="p">:</span>
+    <span class="k">if</span> <span class="n">row_chgs</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">tr</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span> 
+        <span class="n">row_cells</span> <span class="o">=</span> <span class="p">[</span><span class="n">th</span><span class="o">.</span><span class="n">getText</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">th</span> <span class="ow">in</span> <span class="n">tr</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span> 
+                        <span class="k">if</span> <span class="n">th</span><span class="o">.</span><span class="n">getText</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">!=</span> <span class="s1">&#39;&#39;</span><span class="p">]</span>  
+    <span class="k">else</span><span class="p">:</span> 
+        <span class="n">row_cells</span> <span class="o">=</span> <span class="p">(([</span><span class="n">tr</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">getText</span><span class="p">()]</span> <span class="k">if</span> <span class="n">tr</span><span class="o">.</span><span class="n">find</span><span class="p">(</span><span class="s1">&#39;th&#39;</span><span class="p">)</span> <span class="k">else</span> <span class="p">[])</span> 
+                        <span class="o">+</span> <span class="p">[</span><span class="n">td</span><span class="o">.</span><span class="n">getText</span><span class="p">()</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">td</span> <span class="ow">in</span> <span class="n">tr</span><span class="o">.</span><span class="n">find_all</span><span class="p">(</span><span class="s1">&#39;td&#39;</span><span class="p">)])</span>
+        <span class="c1"># check if element is a date </span>
+        <span class="k">if</span> <span class="n">date_check</span><span class="p">(</span><span class="n">row_cells</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span> 
+            <span class="n">date_holder</span> <span class="o">=</span> <span class="n">row_cells</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">reason_holder</span> <span class="o">=</span> <span class="n">row_cells</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span> 
+            <span class="n">row_cells</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">date_holder</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">row_cells</span><span class="p">)</span> <span class="o">==</span> <span class="mi">5</span><span class="p">:</span> 
+                <span class="n">row_cells</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">reason_holder</span><span class="p">)</span> 
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">row_cells</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span> 
+        <span class="c1"># strip out brackets from reference links </span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">row_cells</span><span class="p">)</span> <span class="o">==</span> <span class="mi">6</span><span class="p">:</span> 
+            <span class="n">row_cells</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">sub</span><span class="p">(</span><span class="s2">&quot;[\[].*?[\]]&quot;</span><span class="p">,</span> <span class="s2">&quot;&quot;</span><span class="p">,</span> <span class="n">row_cells</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span>
+        <span class="n">company_changes_list</span> <span class="o">+=</span> <span class="p">[</span><span class="n">row_cells</span><span class="p">]</span>
+
+<span class="n">company_changes_list</span><span class="p">[:</span><span class="mi">6</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[3]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>[[&#39;Date&#39;, &#39;Added&#39;, &#39;Removed&#39;, &#39;Reason&#39;],
+ [&#39;&#39;, &#39;Ticker&#39;],
+ [&#39;January 18, 2019&#39;,
+  &#39;TFX&#39;,
+  &#39;Teleflex Inc&#39;,
+  &#39;PCG&#39;,
+  &#39;PG&amp;E Corp&#39;,
+  &#39;PCG filing for bankrupcy&#39;],
+ [&#39;January 2, 2019&#39;,
+  &#39;FRC&#39;,
+  &#39;First Republic Bank&#39;,
+  &#39;SCG&#39;,
+  &#39;SCANA&#39;,
+  &#39;Dominion Energy acquiring SCANA Corporation&#39;],
+ [&#39;December 24, 2018&#39;,
+  &#39;CE&#39;,
+  &#39;Celanese Corp.&#39;,
+  &#39;ESRX&#39;,
+  &#39;Express Scripts&#39;,
+  &#39;S&amp;P 500 constituent Cigna (NYSE: CI) acquired ESRX&#39;],
+ [&#39;December 3, 2018&#39;,
+  &#39;LW&#39;,
+  &#39;Lamb Weston Holdings Inc&#39;,
+  &#39;COL&#39;,
+  &#39;Rockwell Collins Inc&#39;,
+  &#39;UTX acquires COL &#39;]]</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p><strong>Almost there!</strong> Notice the second element of the list has a junk entry in it - this is due to the odd layout of the HTML table header but such is life when scraping data from the web! Here are the final housekeeping items for this list:</p>
+<ul>
+<li>Delete the first 2 elements <ul>
+<li>We mentioned the junk HTML element but the header row also has to go since we'll be sorting the list for use later in the function </li>
+</ul>
+</li>
+<li>Convert the first element of each list to a datetime object </li>
+<li>Sort the entire list by the date elements in reverse order (most recent changes first) </li>
+</ul>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[4]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="k">del</span> <span class="n">company_changes_list</span><span class="p">[:</span><span class="mi">2</span><span class="p">]</span>
+<span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">company_changes_list</span><span class="p">:</span> 
+    <span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s1">&#39;%B </span><span class="si">%d</span><span class="s1">, %Y&#39;</span><span class="p">)</span> 
+
+<span class="n">company_changes_list</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">x</span><span class="p">:</span> <span class="n">x</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">reverse</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="n">company_changes_list</span><span class="p">[:</span><span class="mi">3</span><span class="p">]</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[4]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>[[datetime.datetime(2019, 1, 18, 0, 0),
+  &#39;TFX&#39;,
+  &#39;Teleflex Inc&#39;,
+  &#39;PCG&#39;,
+  &#39;PG&amp;E Corp&#39;,
+  &#39;PCG filing for bankrupcy&#39;],
+ [datetime.datetime(2019, 1, 2, 0, 0),
+  &#39;FRC&#39;,
+  &#39;First Republic Bank&#39;,
+  &#39;SCG&#39;,
+  &#39;SCANA&#39;,
+  &#39;Dominion Energy acquiring SCANA Corporation&#39;],
+ [datetime.datetime(2018, 12, 24, 0, 0),
+  &#39;CE&#39;,
+  &#39;Celanese Corp.&#39;,
+  &#39;ESRX&#39;,
+  &#39;Express Scripts&#39;,
+  &#39;S&amp;P 500 constituent Cigna (NYSE: CI) acquired ESRX&#39;]]</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Function-that-builds-active-company-ticker-lists-as-of-a-given-date">Function that builds active company ticker lists as of a given date<a class="anchor-link" href="#Function-that-builds-active-company-ticker-lists-as-of-a-given-date">&#182;</a></h3><p>Now we'll write a function that takes a date as an argument and uses the lists we just built to return the companies that were active in the S&amp;P 500 as of the input date. We'll also specify a function argument 'output_type' to determine the format of the returned list. A list object is easier to work with if you want do some slicing or iterating and a string is useful if you're going to feed it directly into a URL string to retrieve data from an API (more on how to do this in later posts).</p>
+
+</div>
+</div>
+</div>
+<div class="cell border-box-sizing code_cell rendered">
+<div class="input">
+<div class="prompt input_prompt">In&nbsp;[5]:</div>
+<div class="inner_cell">
+    <div class="input_area">
+<div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># input_date must be in &#39;YYYY-MM-DD&#39; format </span>
+<span class="k">def</span> <span class="nf">active_ticker_list_builder</span><span class="p">(</span><span class="n">input_date</span><span class="p">,</span> <span class="n">output_type</span><span class="o">=</span><span class="s1">&#39;string&#39;</span><span class="p">):</span>
+    <span class="c1"># convert input date to datetime object (must be in &#39;YYYY-MM-DD&#39; format)</span>
+    <span class="n">input_date_dt</span> <span class="o">=</span> <span class="n">datetime</span><span class="o">.</span><span class="n">datetime</span><span class="o">.</span><span class="n">strptime</span><span class="p">(</span><span class="n">input_date</span><span class="p">,</span> <span class="s1">&#39;%Y-%m-</span><span class="si">%d</span><span class="s1">&#39;</span><span class="p">)</span>
+    <span class="c1"># extract tickers only from current_companies_list (exclude the header row)</span>
+    <span class="n">current_ticker_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">j</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span>  <span class="n">current_companies_list</span><span class="p">[</span><span class="mi">1</span><span class="p">:]]</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">company_changes_list</span><span class="p">:</span>
+        <span class="c1"># if input date is more recent than first change, return current list </span>
+        <span class="k">if</span> <span class="n">input_date_dt</span> <span class="o">&gt;</span> <span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span> 
+            <span class="k">break</span>
+        <span class="k">elif</span> <span class="n">input_date_dt</span> <span class="o">&lt;=</span> <span class="n">i</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">if</span> <span class="n">i</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">and</span> <span class="n">i</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="ow">in</span> <span class="n">current_ticker_list</span><span class="p">:</span> 
+                <span class="n">current_ticker_list</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">i</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">i</span><span class="p">[</span><span class="mi">3</span><span class="p">]:</span> 
+                <span class="n">current_ticker_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">i</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span> 
+            <span class="k">break</span>
+    <span class="n">current_ticker_list</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">output_type</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;string&#39;</span><span class="p">:</span> 
+        <span class="n">current_tickers</span> <span class="o">=</span> <span class="s1">&#39;,&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">current_ticker_list</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">output_type</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span> <span class="o">==</span> <span class="s1">&#39;list&#39;</span><span class="p">:</span> 
+        <span class="n">current_tickers</span> <span class="o">=</span> <span class="n">current_ticker_list</span> 
+    <span class="k">return</span> <span class="n">current_tickers</span>
+
+<span class="n">active_tickers</span> <span class="o">=</span> <span class="n">active_ticker_list_builder</span><span class="p">(</span><span class="s1">&#39;2017-01-01&#39;</span><span class="p">,</span> <span class="n">output_type</span><span class="o">=</span><span class="s1">&#39;string&#39;</span><span class="p">)</span>
+
+<span class="n">active_tickers</span>
+</pre></div>
+
+</div>
+</div>
+</div>
+
+<div class="output_wrapper">
+<div class="output">
+
+
+<div class="output_area">
+<div class="prompt output_prompt">Out[5]:</div>
+
+
+
+<div class="output_text output_subarea output_execute_result">
+<pre>&#39;A,AAL,AAP,AAPL,ABBV,ABC,ABT,ACN,ADBE,ADI,ADM,ADP,ADS,ADSK,AEE,AEP,AES,AET,AFL,AGN,AIG,AIV,AIZ,AJG,AKAM,ALB,ALK,ALL,ALLE,ALXN,AMAT,AME,AMG,AMGN,AMP,AMT,AMZN,AN,ANDV,ANTM,AON,APA,APC,APD,APH,APTV,ARNC,ATVI,AVB,AVGO,AVY,AWK,AXP,AYI,AZO,BA,BAC,BAX,BBBY,BBT,BBY,BCR,BDX,BEN,BF-B,BHGE,BIIB,BK,BKNG,BLK,BLL,BMY,BRK-B,BSX,BWA,BXP,C,CA,CAG,CAH,CAT,CB,CBRE,CBS,CCI,CCL,CELG,CERN,CF,CFG,CHD,CHK,CHRW,CHTR,CI,CINF,CL,CLX,CMA,CMCSA,CME,CMG,CMI,CMS,CNC,CNP,COF,COG,COL,COO,COP,COST,COTY,CPB,CPRI,CRM,CSCO,CSRA,CSX,CTAS,CTL,CTSH,CTXS,CVS,CVX,CXO,D,DAL,DD,DE,DFS,DG,DGX,DHI,DHR,DIS,DISCA,DISCK,DLR,DLTR,DNB,DOV,DPS,DRI,DTE,DUK,DVA,DVN,DWDP,EA,EBAY,ECL,ED,EFX,EIX,EL,EMN,EMR,ENDP,EOG,EQIX,EQR,EQT,ES,ESRX,ESS,ETFC,ETN,ETR,EVHC,EW,EXC,EXPD,EXPE,EXR,F,FAST,FB,FBHS,FCX,FDX,FE,FFIV,FIS,FISV,FITB,FL,FLIR,FLR,FLS,FMC,FOX,FOXA,FRT,FSLR,FTI,FTR,FTV,GD,GE,GGP,GILD,GIS,GLW,GM,GOOG,GOOGL,GPC,GPN,GPS,GRMN,GS,GT,GWW,HAL,HAR,HAS,HBAN,HBI,HCA,HCP,HD,HES,HIG,HOG,HOLX,HON,HP,HPE,HPQ,HRB,HRL,HRS,HSIC,HST,HSY,HUM,IBM,ICE,IFF,ILMN,INTC,INTU,IP,IPG,IQV,IR,IRM,ISRG,ITW,IVZ,JBHT,JCI,JEC,JEF,JNJ,JNPR,JPM,JWN,K,KEY,KHC,KIM,KLAC,KMB,KMI,KMX,KO,KR,KSS,KSU,L,LB,LEG,LEN,LH,LIN,LKQ,LLL,LLTC,LLY,LMT,LNC,LNT,LOW,LRCX,LUV,LVLT,LYB,M,MA,MAA,MAC,MAR,MAS,MAT,MCD,MCHP,MCK,MCO,MDLZ,MDT,MET,MHK,MJN,MKC,MLM,MMC,MMM,MNK,MNST,MO,MON,MOS,MPC,MRK,MRO,MS,MSFT,MSI,MTB,MTD,MU,MUR,MYL,NAVI,NBL,NDAQ,NEE,NEM,NFLX,NFX,NI,NKE,NLSN,NOC,NOV,NRG,NSC,NTAP,NTRS,NUE,NVDA,NWL,NWS,NWSA,O,OKE,OMC,ORCL,ORLY,OXY,PAYX,PBCT,PBI,PCAR,PCG,PDCO,PEG,PEP,PFE,PFG,PG,PGR,PH,PHM,PKI,PLD,PM,PNC,PNR,PNW,PPG,PPL,PRGO,PRU,PSA,PSX,PVH,PWR,PXD,PYPL,QCOM,QRVO,R,RAI,RCL,REGN,RF,RHI,RHT,RIG,RL,ROK,ROP,ROST,RRC,RSG,RTN,SBUX,SCG,SCHW,SE,SEE,SHW,SIG,SJM,SLB,SLG,SNA,SNI,SO,SPG,SPGI,SPLS,SRCL,SRE,STI,STJ,STT,STX,STZ,SWK,SWKS,SWN,SYF,SYK,SYMC,SYY,T,TAP,TDC,TDG,TEL,TGNA,TGT,TIF,TJX,TMK,TMO,TPR,TRIP,TROW,TRV,TSCO,TSN,TSS,TWX,TXN,TXT,UA,UAA,UAL,UDR,UHS,ULTA,UNH,UNM,UNP,UPS,URBN,URI,USB,UTX,V,VAR,VFC,VIAB,VLO,VMC,VNO,VRSK,VRSN,VRTX,VTR,VZ,WAT,WBA,WDC,WEC,WELL,WFC,WFM,WHR,WLTW,WM,WMB,WMT,WRK,WU,WY,WYN,WYNN,XEC,XEL,XL,XLNX,XOM,XRAY,XRX,XYL,YHOO,YUM,ZBH,ZION,ZTS&#39;</pre>
+</div>
+
+</div>
+
+</div>
+</div>
+
+</div>
+<div class="cell border-box-sizing text_cell rendered">
+<div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Closing-thoughts">Closing thoughts<a class="anchor-link" href="#Closing-thoughts">&#182;</a></h3><p>This is obviously a pretty specific use case, so hopefully you find some parts of it helpful. I wrote this as a stand-alone example but if this something you're doing regularly, it's probably better to store these tables in a database and run a daily script with a chron job or something to update the changes (that's my plan, at least).</p>
+<p>If you're only interested in the current list of companies, the first table usually behaves pretty well with the Pandas <code>read_html()</code> function, so that's an easy workaround if you don't care about all the historical changes.</p>
+<p>Drop me a line if you see any bugs/errors or if you have a better way to do this.</p>
+
+</div>
+</div>
+</div>
+ 
+
